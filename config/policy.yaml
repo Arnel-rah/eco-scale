@@ -1,0 +1,12 @@
+version: "1.0"
+alert_mode: false
+policies:
+  - container_name: "app-api-prod"
+    priority: "critical"
+    cpu_limit: 100
+  - container_name: "background-worker"
+    priority: "secondary"
+    cpu_limit: 30
+  - container_name: "jenkins-automation"
+    priority: "low"
+    cpu_limit: 0
