@@ -13,10 +13,6 @@ type DockerScanner struct {
 	cli *client.Client
 }
 
-func (ds *DockerScanner) StopContainer(d string) any {
-	panic("unimplemented")
-}
-
 func NewDockerScanner() (*DockerScanner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -35,6 +31,11 @@ func (ds *DockerScanner) ListActiveContainers() ([]types.Container, error) {
 	}
 
 	return containers, nil
+}
+
+func (ds *DockerScanner) StopContainer(id string) error {
+	ctx := context.Background()
+	return ds.cli.ContainerStop(ctx, id, container.StopOptions{})
 }
 
 func (ds *DockerScanner) Close() {
