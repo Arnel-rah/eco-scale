@@ -3,6 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/Arnel-rah/eco-scale/config"
 	"github.com/Arnel-rah/eco-scale/docker"
@@ -10,15 +14,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Eco-Scale Daemon ===")
-
-	cfg, err := config.LoadConfig("config/policy.yaml")
-	if err != nil {
-		log.Fatalf("Erreur lors du chargement de la config: %v", err)
-	}
-
-	fmt.Printf("Configuration version %s chargée avec succès !\n", cfg.Version)
-	fmt.Printf("Mode alerte actuel : %v\n\n", cfg.AlertMode)
+	fmt.Println("=== Eco-Scale Daemon Started ===")
 
 	scanner, err := docker.NewDockerScanner()
 	if err != nil {
@@ -26,41 +22,52 @@ func main() {
 	}
 	defer scanner.Close()
 
-	activeContainers, err := scanner.ListActiveContainers()
-	if err != nil {
-		log.Fatalf("Erreur lors de la récupération des conteneurs: %v", err)
-	}
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
-	fmt.Println("=== Analyse du Système ===")
-	actionsRequired := scheduler.AnalyzeSystem(cfg.Policies, activeContainers, cfg.AlertMode)
+	stopSignal := make(chan os.Signal, 1)
+	signal.Notify(stopSignal, os.Interrupt, syscall.SIGTERM)
 
-	if len(actionsRequired) == 0 {
-		fmt.Println("Aucune action requise.")
-		return
-	}
-
-	for _, target := range actionsRequired {
-		fmt.Printf("[CIBLE TROUVÉE] Conteneur: %s (%s) | Action requise: %s\n",
-			target.Name,
-			target.ID,
-			target.Required,
-		)
-
-		if target.Required == scheduler.ActionStop {
-			fmt.Printf("-> Arrêt du conteneur %s en cours...\n", target.Name)
-			err := scanner.StopContainer(target.ID)
+	for {
+		select {
+		case <-stopSignal:
+			fmt.Println("\n=== Arrêt du démon Eco-Scale ===")
+			return
+		case <-ticker.C:
+			cfg, err := config.LoadConfig("config/policy.yaml")
 			if err != nil {
-				fmt.Printf("Erreur lors de l'arrêt de %s: %v\n", target.Name, err)
-			} else {
-				fmt.Printf("Conteneur %s arrêté avec succès.\n", target.Name)
+				fmt.Printf("Erreur rechargement config: %v\n", err)
+				continue
 			}
-		} else if target.Required == scheduler.ActionScale {
-			fmt.Printf("-> Bridage du conteneur %s à %d%% CPU...\n", target.Name, target.Policy.CPULimit)
-			err := scanner.ScaleContainer(target.ID, target.Policy.CPULimit)
+
+			activeContainers, err := scanner.ListActiveContainers()
 			if err != nil {
-				fmt.Printf("Erreur lors du bridage de %s: %v\n", target.Name, err)
-			} else {
-				fmt.Printf("Conteneur %s bridé avec succès à %d%% CPU.\n", target.Name, target.Policy.CPULimit)
+				fmt.Printf("Erreur récupération conteneurs: %v\n", err)
+				continue
+			}
+
+			actionsRequired := scheduler.AnalyzeSystem(cfg.Policies, activeContainers, cfg.AlertMode)
+			if len(actionsRequired) == 0 {
+				continue
+			}
+
+			fmt.Printf("[%s] --- Exécution de la routine de régulation ---\n", time.Now().Format("15:04:05"))
+			for _, target := range actionsRequired {
+				if target.Required == scheduler.ActionStop {
+					fmt.Printf("-> Arrêt de %s...\n", target.Name)
+					if err := scanner.StopContainer(target.ID); err != nil {
+						fmt.Printf("Erreur arrêt: %v\n", err)
+					} else {
+						fmt.Printf("%s arrêté.\n", target.Name)
+					}
+				} else if target.Required == scheduler.ActionScale {
+					fmt.Printf("-> Bridage de %s à %d%% CPU...\n", target.Name, target.Policy.CPULimit)
+					if err := scanner.ScaleContainer(target.ID, target.Policy.CPULimit); err != nil {
+						fmt.Printf("Erreur bridage: %v\n", err)
+					} else {
+						fmt.Printf("%s bridé.\n", target.Name)
+					}
+				}
 			}
 		}
 	}
