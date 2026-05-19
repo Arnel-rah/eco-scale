@@ -38,6 +38,21 @@ func (ds *DockerScanner) StopContainer(id string) error {
 	return ds.cli.ContainerStop(ctx, id, container.StopOptions{})
 }
 
+func (ds *DockerScanner) ScaleContainer(id string, cpuPercentage int) error {
+	ctx := context.Background()
+
+	nanoCPUs := int64(cpuPercentage) * 10000000
+
+	updateConfig := container.UpdateConfig{
+		Resources: container.Resources{
+			NanoCPUs: nanoCPUs,
+		},
+	}
+
+	_, err := ds.cli.ContainerUpdate(ctx, id, updateConfig)
+	return err
+}
+
 func (ds *DockerScanner) Close() {
 	if ds.cli != nil {
 		ds.cli.Close()
