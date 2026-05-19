@@ -52,10 +52,16 @@ func main() {
 			if err != nil {
 				fmt.Printf("Erreur lors de l'arrêt de %s: %v\n", target.Name, err)
 			} else {
-				fmt.Printf("Conteneur %s arrêté avec succès pour économie d'énergie.\n", target.Name)
+				fmt.Printf("Conteneur %s arrêté avec succès.\n", target.Name)
 			}
 		} else if target.Required == scheduler.ActionScale {
-			fmt.Printf("-> Action SCALE requise pour %s (%d%% CPU). (Cgroups à implémenter)\n", target.Name, target.Policy.CPULimit)
+			fmt.Printf("-> Bridage du conteneur %s à %d%% CPU...\n", target.Name, target.Policy.CPULimit)
+			err := scanner.ScaleContainer(target.ID, target.Policy.CPULimit)
+			if err != nil {
+				fmt.Printf("Erreur lors du bridage de %s: %v\n", target.Name, err)
+			} else {
+				fmt.Printf("Conteneur %s bridé avec succès à %d%% CPU.\n", target.Name, target.Policy.CPULimit)
+			}
 		}
 	}
 }
